@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Sistema de Inspeção - Operacional</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+<!-- Leaflet CSS & JS para o Mapa Interativo -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Leaflet MarkerCluster para afastar ícones sobrepostos (Efeito Spiderfy) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+<script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-gray-100 h-screen flex overflow-hidden relative">
+
+<div id="printArea"></div>
+
+<div id="loginScreen" class="fixed inset-0 bg-red-700 z-[99999] flex flex-col justify-center items-center p-4 overflow-y-auto">
+ <div class="bg-white p-6 sm:p-8 rounded-lg shadow-2xl w-full max-w-sm text-center transition-all my-auto">
+ <i class="fa-solid fa-fire-extinguisher text-5xl text-red-600 mb-4"></i><h1 class="text-2xl font-black text-gray-800 mb-1">InspeçãoFire</h1><p class="text-gray-500 mb-6 text-sm font-semibold">Acesso ao Sistema Operacional</p>
+ <div class="text-left mb-4">
+     <label class="block text-sm font-bold text-gray-700 mb-2">Usuário / Matrícula</label>
+     <input type="text" id="loginInput" class="w-full p-3 border-2 border-gray-300 rounded focus:border-red-500 outline-none uppercase font-bold text-gray-700" placeholder="Ex: 12345" required>
+ </div>
+ <div class="text-left mb-6">
+     <label class="block text-sm font-bold text-gray-700 mb-2">Senha de Acesso</label>
+     <input type="password" id="passwordInput" class="w-full p-3 border-2 border-gray-300 rounded focus:border-red-500 outline-none font-bold text-gray-700" placeholder="••••••••" required onkeypress="if(event.key === 'Enter') entrarNoSistema()">
+ </div>
+ 
+ <p id="loginErrorMsg" class="hidden bg-red-50 text-red-600 text-sm font-bold mb-4 p-3 rounded border border-red-200 text-center"></p>
+
+ <button type="button" onclick="entrarNoSistema()" class="w-full bg-red-600 text-white font-bold py-3 rounded shadow hover:bg-red-700 transition">Entrar no Sistema</button>
+ </div>
+ <div class="mt-8 text-white opacity-50 text-sm font-bold tracking-widest pointer-events-none pb-4">BY GLEISON SILVA</div>
+</div>
+
+<div id="loginAnimation" class="fixed inset-0 bg-red-700 z-[100000] hidden flex-col justify-center items-center overflow-hidden">
+ <div class="relative w-80 h-64 flex justify-center items-center">
+ <div id="animFire" class="absolute transition-all duration-700 flex justify-center items-end w-48 h-56 left-4 bottom-4 origin-bottom"><div class="absolute bottom-0 w-40 h-48 bg-red-600 rounded-[50%_50%_40%_40%] mix-blend-screen blur-[30px]" style="animation: flicker-intenso 0.1s infinite alternate-reverse;"></div><div class="absolute bottom-2 w-32 h-40 bg-orange-500 rounded-[50%_50%_35%_35%] mix-blend-screen blur-xl" style="animation: flicker-intenso 0.15s infinite alternate;"></div><div class="absolute bottom-0 w-24 h-28 bg-yellow-400 rounded-full mix-blend-screen blur-lg" style="animation: flicker-intenso 0.12s infinite ease-in-out;"></div></div>
+ <div id="animSpray" class="absolute right-8 top-[90px] transition-all duration-300 flex items-center justify-end opacity-0" style="width: 0px; height: 80px; z-index: 30;">
+ <div class="absolute right-0 w-[120px] h-[60px] bg-white rounded-l-full origin-right" style="animation: nevoeiro-direto 0.2s infinite ease-out;"></div>
+ <div class="absolute right-5 w-[100px] h-[100px] bg-gray-100 rounded-full origin-center" style="animation: nevoeiro-nuvem-1 0.25s infinite ease-out;"></div>
+ <div class="absolute right-10 w-[150px] h-[150px] bg-white rounded-full origin-center" style="animation: nevoeiro-nuvem-1 0.35s infinite ease-out; animation-delay: 0.1s;"></div>
+ </div>
+ <i id="animExt" class="fa-solid fa-fire-extinguisher text-white text-[80px] absolute -right-8 opacity-0 transition-all duration-500 z-20"></i>
+ </div>
+ <h2 id="animText" class="text-white text-2xl font-black mt-4 tracking-widest uppercase">INICIANDO...</h2>
+</div>
+
+<aside id="sidebar" class="w-64 bg-red-700 text-white flex flex-col shadow-lg transition-transform transform md:translate-x-0 -translate-x-full fixed md:relative z-20 h-full">
+ <div class="p-6 text-center border-b border-red-800 relative"><i class="fa-solid fa-fire-extinguisher text-4xl mb-2"></i><h1 class="text-xl font-bold">InspeçãoFire</h1><div class="mt-3 bg-red-900 rounded py-1 px-2 text-xs font-bold text-red-100 flex items-center justify-center flex-col"><div class="flex items-center"><i class="fa-solid fa-building mr-1"></i> <span id="nomeEquipeSidebar">Unidade...</span></div><div class="mt-1 text-[10px] text-red-300 flex items-center"><i class="fa-solid fa-user mr-1"></i> <span id="nomeUserSidebar">User</span></div></div></div>
+ <nav class="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
+ <a href="#" onclick="switchTab('dashboard')" class="block p-3 rounded hover:bg-red-600 transition"><i class="fa-solid fa-chart-line w-6"></i> Painel</a>
+ <a id="navUnidades" href="#" onclick="switchTab('unidades')" class="hidden p-3 rounded hover:bg-red-600 transition"><i class="fa-solid fa-building-flag w-6"></i> Região</a>
+ <a href="#" onclick="switchTab('mapa')" class="block p-3 rounded hover:bg-red-600 transition"><i class="fa-solid fa-map-location-dot w-6"></i> Mapa dos Extintores</a>
+ <a href="#" onclick="switchTab('extintores')" class="block p-3 rounded hover:bg-red-600 transition"><i class="fa-solid fa-fire-extinguisher w-6"></i> Extintores</a>
+ <a href="#" onclick="switchTab('mangueiras')" class="block p-3 rounded hover:bg-red-600 transition"><i class="fa-solid fa-droplet w-6"></i> Hidrantes / Mangueiras</a>
+ <a href="#" onclick="switchTab('inspecoes')" class="block p-3 rounded hover:bg-red-600 transition"><i class="fa-solid fa-clipboard-check w-6"></i> Inspeções</a>
+ <a href="#" onclick="switchTab('manutencao')" class="block p-3 rounded hover:bg-red-600 transition"><i class="fa-solid fa-screwdriver-wrench w-6"></i> Manutenção (O.S.)</a>
+ <a id="navLixeira" href="#" onclick="switchTab('lixeira')" class="hidden p-3 rounded hover:bg-red-600 transition"><i class="fa-solid fa-shield-halved w-6"></i> Lixeira & Backup</a>
+ <a id="navUsuarios" href="#" onclick="switchTab('usuariosTab')" class="hidden p-3 rounded hover:bg-red-600 transition"><i class="fa-solid fa-users-gear w-6"></i> Acessos e Usuários</a>
+ </nav>
+ <div class="p-4 border-t border-red-800 flex flex-col space-y-2">
+ <div id="statusSync" class="text-xs font-bold text-green-300 text-center flex items-center justify-center"><i class="fa-solid fa-cloud-check mr-1"></i> Nuvem Sincronizada</div>
+ <button onclick="sairDoSistema()" class="w-full bg-red-800 text-white font-bold py-2 rounded shadow hover:bg-red-900 transition text-sm flex items-center justify-center"><i class="fa-solid fa-right-from-bracket mr-2"></i> Sair do Sistema</button>
+ </div>
+</aside>
+
+<main class="flex-1 flex flex-col h-full overflow-hidden relative">
+ <header class="bg-white shadow p-4 flex justify-between items-center z-10 no-print">
+ <button type="button" onclick="toggleSidebar()" class="md:hidden text-gray-600 text-2xl"><i class="fa-solid fa-bars"></i></button><h2 id="pageTitle" class="text-xl font-semibold text-gray-800">Painel</h2>
+ </header>
+ <div class="p-4 sm:p-6 flex-1 overflow-y-auto relative pb-20 custom-scrollbar">
+ 
+<div id="dashboard" class="tab-content active relative min-h-[calc(100vh-140px)]">
+ 
+ <!-- ALERTAS PROATIVOS (ROBÔ VIGIA) -->
+ <div id="alertasProativos" class="hidden mb-6 bg-red-50 border-l-4 border-red-600 p-4 rounded-r-lg shadow-sm">
+ </div>
+
+ <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 relative z-10">
+ <div class="bg-white p-5 rounded-lg shadow border-l-4 border-red-600"><h3 class="text-red-600 text-xs font-bold uppercase flex items-center"><i class="fa-solid fa-fire-extinguisher text-white bg-red-600 p-1.5 rounded shadow-sm mr-2"></i> Total Extintores</h3><p id="dashExtintores" class="text-2xl font-bold text-red-700 mt-2">0</p></div>
+ <div class="bg-white p-5 rounded-lg shadow border-l-4 border-blue-600"><h3 class="text-blue-600 text-xs font-bold uppercase flex items-center"><i class="fa-solid fa-droplet text-white bg-blue-600 p-1.5 rounded shadow-sm mr-2"></i> Total Hidrantes</h3><p id="dashHidrantes" class="text-2xl font-bold text-blue-700 mt-2">0</p></div>
+ <div class="bg-white p-5 rounded-lg shadow border-l-4 border-orange-500"><h3 class="text-orange-500 text-xs font-bold uppercase flex items-center"><i class="fa-solid fa-tape text-white bg-orange-500 p-1.5 rounded shadow-sm mr-2"></i> Qtd. Mangueiras</h3><p id="dashMangueirasTotal" class="text-2xl font-bold text-orange-600 mt-2">0</p></div>
+ <div class="bg-white p-5 rounded-lg shadow border-l-4 border-green-600"><h3 class="text-green-600 text-xs font-bold uppercase flex items-center"><i class="fa-solid fa-clipboard-check text-white bg-green-600 p-1.5 rounded shadow-sm mr-2"></i> Total Inspeções</h3><p id="dashInspecoes" class="text-2xl font-bold text-green-700 mt-2">0</p></div>
+ </div>
+
+ <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 relative z-10 no-print">
+ <div class="bg-white p-4 rounded-lg shadow border flex flex-col h-64"><div class="flex-1 relative w-full h-full"><canvas id="chartTipos"></canvas></div></div>
+ <div class="bg-white p-4 rounded-lg shadow border flex flex-col h-64"><div class="flex-1 relative w-full h-full"><canvas id="chartStatus"></canvas></div></div>
+ </div>
+
+ <div id="dashEquipesContainer" class="relative z-10 hidden mt-8"><h3 class="text-lg font-bold text-gray-700 mb-4 border-b-2 border-gray-200 pb-2"><i class="fa-solid fa-sitemap mr-2"></i> Resumo por Unidades</h3><div id="dashEquipesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div></div>
+
+ <!-- NOVO CARTÃO: INVENTÁRIO DETALHADO POR UNIDADE -->
+ <div id="dashInventarioContainer" class="relative z-10 hidden mt-8">
+     <h3 class="text-lg font-bold text-gray-700 mb-4 border-b-2 border-gray-200 pb-2"><i class="fa-solid fa-clipboard-list text-blue-600 mr-2"></i> Inventário Detalhado por Unidade</h3>
+     <div class="bg-white rounded-lg shadow overflow-x-auto custom-scrollbar">
+         <table class="w-full text-left border-collapse whitespace-nowrap">
+             <thead>
+                 <tr class="bg-gray-100 text-gray-700 text-sm">
+                     <th class="p-3 border-b text-left">Unidade</th>
+                     <th class="p-3 border-b text-left">Extintores (Tipo / Cap.)</th>
+                     <th class="p-3 border-b text-center">Qtd. Hidrantes</th>
+                     <th class="p-3 border-b text-left">Mangueiras (Qtd / Tipo / Tam)</th>
+                 </tr>
+             </thead>
+             <tbody id="dashInventarioBody" class="text-sm"></tbody>
+         </table>
+     </div>
+ </div>
+
+ </div>
+
+ <!-- MAPA DA FROTA -->
+ <div id="mapa" class="tab-content relative min-h-[calc(100vh-140px)]">
+    <div class="flex justify-between items-center mb-4 no-print">
+        <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-map-location-dot mr-2 text-blue-600"></i> Mapa dos Extintores</h3>
+    </div>
+    <div class="bg-white p-2 rounded-lg shadow border h-[600px] w-full relative">
+        <div id="mapContainer" class="w-full h-full rounded z-10"></div>
+    </div>
+ </div>
+
+ <div id="unidades" class="tab-content relative min-h-[calc(100vh-140px)]">
+ <div class="flex justify-between items-center mb-4 no-print"><h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-building-flag mr-2 text-red-600"></i> Gestão de Região por Unidade</h3></div>
+ <div class="flex space-x-2 overflow-x-auto pb-4 mb-4 custom-scrollbar no-print">
+ <button type="button" onclick="filtrarRegiaoGrid('Todas', this)" class="btn-regiao whitespace-nowrap bg-red-600 text-white px-4 py-1.5 rounded-full text-sm font-bold shadow transition">Todas</button>
+ <button type="button" onclick="filtrarRegiaoGrid('Fortaleza/RMF', this)" class="btn-regiao whitespace-nowrap bg-gray-200 text-gray-700 hover:bg-gray-300 px-4 py-1.5 rounded-full text-sm font-bold shadow-sm transition">Fortaleza/RMF</button>
+ <button type="button" onclick="filtrarRegiaoGrid('Cariri', this)" class="btn-regiao whitespace-nowrap bg-gray-200 text-gray-700 hover:bg-gray-300 px-4 py-1.5 rounded-full text-sm font-bold shadow-sm transition">Cariri</button>
+ <button type="button" onclick="filtrarRegiaoGrid('Centro-Sul', this)" class="btn-regiao whitespace-nowrap bg-gray-200 text-gray-700 hover:bg-gray-300 px-4 py-1.5 rounded-full text-sm font-bold shadow-sm transition">Centro-Sul</button>
+ <button type="button" onclick="filtrarRegiaoGrid('Zona Norte/Ibiapaba', this)" class="btn-regiao whitespace-nowrap bg-gray-200 text-gray-700 hover:bg-gray-300 px-4 py-1.5 rounded-full text-sm font-bold shadow-sm transition">Zona Norte</button>
+ <button type="button" onclick="filtrarRegiaoGrid('Sertão Central/Inhamuns', this)" class="btn-regiao whitespace-nowrap bg-gray-200 text-gray-700 hover:bg-gray-300 px-4 py-1.5 rounded-full text-sm font-bold shadow-sm transition">Sertão Central</button>
+ <button type="button" onclick="filtrarRegiaoGrid('Jaguaribe/Litoral', this)" class="btn-regiao whitespace-nowrap bg-gray-200 text-gray-700 hover:bg-gray-300 px-4 py-1.5 rounded-full text-sm font-bold shadow-sm transition">Jaguaribe</button>
+ <button type="button" onclick="filtrarRegiaoGrid('Unidades Móveis', this)" class="btn-regiao whitespace-nowrap bg-gray-200 text-gray-700 hover:bg-gray-300 px-4 py-1.5 rounded-full text-sm font-bold shadow-sm transition">Móveis</button>
+ </div>
+ <div id="unidadesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10"></div>
+ </div>
+
+ <div id="extintores" class="tab-content">
+ <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 no-print space-y-2 sm:space-y-0">
+     <h3 class="text-lg font-bold">Lista de Extintores</h3>
+     <div class="flex space-x-2 w-full sm:w-auto justify-end flex-wrap">
+         <button type="button" id="btnLoteExt" onclick="abrirModalLote('extintor')" class="hidden bg-yellow-500 text-white px-4 py-2 rounded shadow hover:bg-yellow-600 transition font-bold whitespace-nowrap mb-2 sm:mb-0"><i class="fa-solid fa-layer-group mr-1"></i> Ações em Lote</button>
+         <button type="button" id="btnPrintExtAdmin" onclick="imprimirRelacao('extintor')" class="hidden bg-gray-800 text-white px-4 py-2 rounded shadow hover:bg-gray-900 transition font-bold whitespace-nowrap mb-2 sm:mb-0"><i class="fa-solid fa-print mr-1"></i> Imprimir Relatório</button>
+         <button type="button" onclick="prepararNovoEquipamento('extintor')" class="bg-red-600 text-white px-4 py-2 rounded shadow hover:bg-red-700 transition font-bold whitespace-nowrap"><i class="fa-solid fa-plus mr-1"></i><i class="fa-solid fa-fire-extinguisher mr-1"></i> Novo Extintor</button>
+     </div>
+ </div>
+ <div class="bg-white rounded-lg shadow overflow-x-auto custom-scrollbar">
+ <table class="w-full text-left border-collapse whitespace-nowrap">
+ <thead><tr class="bg-gray-100 text-gray-700 text-sm">
+ <th class="p-3 border-b text-center chk-col hidden w-10"><input type="checkbox" onclick="toggleTodosLote(this, 'chk-ext')"></th>
+ <th class="p-3 border-b text-left">Data Cadastro</th>
+ <th class="p-3 border-b text-left">Unidade</th>
+ <th class="p-3 border-b text-left">Responsável</th>
+ <th class="p-3 border-b text-left">Número/Pat.</th>
+ <th class="p-3 border-b text-center">Última Recarga</th>
+ <th class="p-3 border-b text-center">Próx. Teste</th>
+ <th class="p-3 border-b text-left">Localização</th>
+ <th class="p-3 border-b text-left">Marca</th>
+ <th class="p-3 border-b text-left">Tipo/Classe</th>
+ <th class="p-3 border-b text-left">Capacidade</th>
+ <th class="p-3 border-b text-left">Cap. Extintora</th>
+ <th class="p-3 border-b no-print text-center sticky right-0 bg-gray-100 z-10">Ações</th>
+ </tr></thead>
+ <tbody id="extintoresTableBody" class="text-sm"></tbody>
+ </table>
+ </div>
+ </div>
+
+ <div id="mangueiras" class="tab-content">
+ <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 no-print space-y-2 sm:space-y-0">
+     <h3 class="text-lg font-bold flex items-center"><i class="fa-solid fa-droplet text-white bg-indigo-600 p-1.5 rounded shadow-sm mr-2"></i> Lista de Hidrantes</h3>
+     <div class="flex space-x-2 w-full sm:w-auto justify-end flex-wrap">
+         <button type="button" id="btnLoteMan" onclick="abrirModalLote('mangueira')" class="hidden bg-yellow-500 text-white px-4 py-2 rounded shadow hover:bg-yellow-600 transition font-bold whitespace-nowrap mb-2 sm:mb-0"><i class="fa-solid fa-layer-group mr-1"></i> Ações em Lote</button>
+         <button type="button" id="btnPrintManAdmin" onclick="imprimirRelacao('mangueira')" class="hidden bg-gray-800 text-white px-4 py-2 rounded shadow hover:bg-gray-900 transition font-bold whitespace-nowrap mb-2 sm:mb-0"><i class="fa-solid fa-print mr-1"></i> Imprimir Relatório</button>
+         <button type="button" onclick="prepararNovoEquipamento('mangueira')" class="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition font-bold whitespace-nowrap"><i class="fa-solid fa-plus mr-1"></i><i class="fa-solid fa-droplet mr-1"></i> Novo Hidrante</button>
+     </div>
+ </div>
+ <div class="bg-white rounded-lg shadow overflow-x-auto custom-scrollbar"><table class="w-full text-left border-collapse whitespace-nowrap"><thead><tr class="bg-gray-100 text-gray-700 text-sm">
+ <th class="p-3 border-b text-center chk-col hidden w-10"><input type="checkbox" onclick="toggleTodosLote(this, 'chk-man')"></th>    
+ <th class="p-3 border-b text-left">Data Cadastro</th><th class="p-3 border-b text-left">Unidade</th><th class="p-3 border-b text-left">Responsável</th><th class="p-3 border-b text-left">Número/Pat.</th><th class="p-3 border-b text-left">Localização</th><th class="p-3 border-b text-left">Diâmetro</th><th class="p-3 border-b text-left">Qtd Mangueiras</th><th class="p-3 border-b text-left">Dimensão</th><th class="p-3 border-b text-left">Tipo Mangueira</th><th class="p-3 border-b text-center">Próximo Teste</th><th class="p-3 border-b no-print text-center sticky right-0 bg-gray-100 z-10">Ações</th></tr></thead><tbody id="mangueirasTableBody" class="text-sm"></tbody></table></div>
+ </div>
+
+ <div id="inspecoes" class="tab-content">
+ <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 no-print space-y-2 sm:space-y-0">
+    <h3 class="text-lg font-bold">Histórico de Inspeções</h3>
+    <div class="space-x-2 flex w-full sm:w-auto flex-wrap sm:flex-nowrap justify-end">
+        <button type="button" id="btnPrintInspAdmin" onclick="imprimirRelacao('inspecao')" class="hidden mb-2 sm:mb-0 bg-gray-800 text-white px-4 py-2 rounded shadow hover:bg-gray-900 transition font-bold mr-2 whitespace-nowrap"><i class="fa-solid fa-print mr-1"></i> Imprimir Relatório</button>
+        <button type="button" onclick="iniciarScanner()" class="mb-2 sm:mb-0 bg-gray-800 text-white px-4 py-2 rounded shadow hover:bg-gray-900 transition font-bold mr-2"><i class="fa-solid fa-qrcode"></i> Escanear</button>
+        <button type="button" onclick="prepararInspecaoManual()" class="mb-2 sm:mb-0 bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 transition font-bold"><i class="fa-solid fa-clipboard-check"></i> Nova Inspeção</button>
+    </div>
+ </div>
+ <h4 class="font-bold text-gray-700 mb-2 mt-4 flex items-center"><i class="fa-solid fa-fire-extinguisher text-white bg-red-600 p-1.5 rounded shadow-sm mr-2"></i> Inspeções Registradas</h4>
+ <div class="bg-white rounded-lg shadow overflow-x-auto custom-scrollbar mb-6">
+ <table class="w-full text-left border-collapse whitespace-nowrap">
+ <thead><tr class="bg-gray-100 text-gray-700 text-sm">
+ <th class="p-3 border-b text-left">Status</th>
+ <th class="p-3 border-b text-left">Data</th>
+ <th class="p-3 border-b text-left">Unidade</th>
+ <th class="p-3 border-b text-left">Fiscal</th>
+ <th class="p-3 border-b text-left">Nº Equip.</th>
+ <th class="p-3 border-b text-center">Última Recarga</th>
+ <th class="p-3 border-b text-center">Validade (Teste)</th>
+ <th class="p-3 border-b text-left">Categoria</th>
+ <th class="p-3 border-b text-left">Localização</th>
+ <th class="p-3 border-b no-print text-center sticky right-0 bg-gray-100 z-10">Ações / Mídia</th>
+ </tr></thead>
+ <tbody id="inspecoesTableBody" class="text-sm"></tbody>
+ </table>
+ </div>
+ </div>
+
+ <div id="manutencao" class="tab-content">
+ <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 no-print space-y-2 sm:space-y-0">
+    <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-screwdriver-wrench text-orange-600 mr-2"></i> Ordens de Serviço (Manutenção)</h3>
+    <div class="flex space-x-2 w-full sm:w-auto justify-end">
+        <button type="button" id="btnPrintOsAdmin" onclick="imprimirRelacao('os')" class="hidden bg-gray-800 text-white px-4 py-2 rounded shadow hover:bg-gray-900 transition font-bold whitespace-nowrap"><i class="fa-solid fa-print mr-1"></i> Imprimir Relatório</button>
+    </div>
+ </div>
+ <div class="bg-white p-4 rounded-lg shadow-sm border border-orange-200 mb-4 text-sm text-gray-600"><strong>Dica:</strong> Ordens de Serviço (O.S.) são geradas automaticamente quando um equipamento é <b>Reprovado</b> no Checklist de Inspeção. Para concluir, é obrigatório anexar uma foto como evidência!</div>
+ <div class="bg-white rounded-lg shadow overflow-x-auto custom-scrollbar">
+     <table class="w-full text-left border-collapse whitespace-nowrap">
+         <thead><tr class="bg-gray-100 text-gray-700 text-sm">
+             <th class="p-3 border-b text-left">O.S. ID</th>
+             <th class="p-3 border-b text-left">Status</th>
+             <th class="p-3 border-b text-left">Data Geração</th>
+             <th class="p-3 border-b text-left">Unidade</th>
+             <th class="p-3 border-b text-left">Nº / Patrimônio</th>
+             <th class="p-3 border-b text-left">Localização</th>
+             <th class="p-3 border-b text-left">Motivo (Falhas)</th>
+             <th class="p-3 border-b text-center sticky right-0 bg-gray-100 z-10">Ação</th>
+         </tr></thead>
+         <tbody id="osTableBody" class="text-sm"></tbody>
+     </table>
+ </div>
+ </div>
+
+ <!-- NOVA ABA DE LIXEIRA E BACKUP -->
+ <div id="lixeira" class="tab-content relative min-h-[calc(100vh-140px)]">
+     <div class="flex justify-between items-center mb-4 no-print"><h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-shield-halved mr-2 text-red-600"></i> Segurança, Backup e Lixeira</h3></div>
+     
+     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+         <div class="bg-white p-5 rounded-lg shadow-sm border-t-4 border-blue-600 text-center flex flex-col justify-between">
+             <div>
+                 <i class="fa-solid fa-download text-4xl text-blue-500 mb-3 mt-2"></i>
+                 <h4 class="font-bold text-gray-800 mb-2">Fazer Backup do Sistema</h4>
+                 <p class="text-xs text-gray-500 mb-2 px-4">Cria e baixa um arquivo completo (.json) com todos os dados atuais (Unidades, Extintores, O.S, etc). Guarde isso com segurança!</p>
+                 <p class="text-xs font-bold text-blue-700 mb-4 bg-blue-50 py-1 rounded">Último Backup: <span id="lblUltimoBackup" class="text-gray-800">Nunca realizado</span></p>
+             </div>
+             <button onclick="fazerBackupCompleto()" class="bg-blue-600 text-white px-4 py-3 rounded shadow hover:bg-blue-700 font-bold text-sm w-full transition"><i class="fa-solid fa-file-export mr-2"></i> Gerar e Baixar Backup</button>
+         </div>
+         <div class="bg-white p-5 rounded-lg shadow-sm border-t-4 border-orange-500 text-center flex flex-col justify-between">
+             <div>
+                 <i class="fa-solid fa-upload text-4xl text-orange-500 mb-3 mt-2"></i>
+                 <h4 class="font-bold text-gray-800 mb-2">Restaurar Sistema</h4>
+                 <p class="text-xs text-gray-500 mb-4 px-4">Deu pane? Envie o arquivo de backup aqui e o sistema vai voltar a ser exatamente o que era no momento em que foi salvo.</p>
+             </div>
+             <input type="file" id="fileRestore" accept=".json" class="hidden" onchange="processarRestauracaoBackup(event)">
+             <button onclick="document.getElementById('fileRestore').click()" class="bg-orange-500 text-white px-4 py-3 rounded shadow hover:bg-orange-600 font-bold text-sm w-full transition"><i class="fa-solid fa-file-import mr-2"></i> Carregar Backup (.json)</button>
+         </div>
+     </div>
+
+     <div class="bg-white rounded-lg shadow overflow-x-auto custom-scrollbar mt-6">
+         <div class="p-4 bg-gray-50 border-b flex justify-between items-center">
+             <h4 class="font-bold text-gray-700"><i class="fa-solid fa-trash-can text-red-500 mr-2"></i> Lixeira Inteligente (Itens Ocultados)</h4>
+             <button onclick="esvaziarLixeira()" class="bg-red-100 text-red-600 px-4 py-1.5 rounded shadow-sm text-xs font-bold hover:bg-red-200 transition"><i class="fa-solid fa-fire mr-1"></i> Esvaziar Lixeira</button>
+         </div>
+         <table class="w-full text-left border-collapse whitespace-nowrap">
+             <thead><tr class="bg-gray-200 text-gray-700 text-xs">
+                 <th class="p-3 border-b text-left">Data de Exclusão</th>
+                 <th class="p-3 border-b text-left">Tipo</th>
+                 <th class="p-3 border-b text-left">Identificação / Detalhes</th>
+                 <th class="p-3 border-b text-left">Unidade</th>
+                 <th class="p-3 border-b text-center">Ações</th>
+             </tr></thead>
+             <tbody id="lixeiraTableBody" class="text-sm"></tbody>
+         </table>
+     </div>
+ </div>
+
+ <!-- NOVA ABA DE USUÁRIOS (ADMIN) -->
+ <div id="usuariosTab" class="tab-content relative min-h-[calc(100vh-140px)]">
+     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 no-print">
+         <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-users-gear mr-2 text-blue-600"></i> Gestão de Usuários e Acessos</h3>
+         <button type="button" onclick="abrirModalNovoUsuario()" class="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition font-bold whitespace-nowrap mt-2 sm:mt-0"><i class="fa-solid fa-user-plus mr-1"></i> Novo Usuário</button>
+     </div>
+     <div class="bg-white rounded-lg shadow overflow-x-auto custom-scrollbar">
+         <table class="w-full text-left border-collapse whitespace-nowrap">
+             <thead><tr class="bg-gray-200 text-gray-700 text-xs">
+                 <th class="p-3 border-b text-left">Login (Matrícula)</th>
+                 <th class="p-3 border-b text-left">Nome Completo</th>
+                 <th class="p-3 border-b text-left">Unidade Vinculada</th>
+                 <th class="p-3 border-b text-left">Status da Senha</th>
+                 <th class="p-3 border-b text-center sticky right-0 bg-gray-200 z-10">Ações</th>
+             </tr></thead>
+             <tbody id="usuariosTableBody" class="text-sm"></tbody>
+         </table>
+     </div>
+ </div>
+
+ </div>
+</main>
+
+<!-- Modais de Cadastro (Extintor e Mangueira) -->
+<div id="modalExtintor" class="modal fixed inset-0 bg-black bg-opacity-50 justify-center items-center z-[9999] p-2 sm:p-4">
+ <div class="bg-white p-4 sm:p-6 rounded-lg shadow-lg w-full max-w-4xl max-h-[85vh] overflow-y-auto relative my-auto custom-scrollbar">
+ <button type="button" onclick="closeModal('modalExtintor')" class="absolute top-4 right-4 text-gray-400 hover:text-red-600 transition text-2xl font-bold"><i class="fa-solid fa-xmark"></i></button>
+ <h3 id="tituloModalExtintor" class="text-lg font-bold mb-4 border-b pb-2 text-gray-900 pr-8">Cadastrar Extintor Base</h3>
+ <form id="formExtintor" onsubmit="return salvarEquipamentoLocal(event, 'extintor')">
+ <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Data de Cadastro *</label><input type="date" id="extDataInspecao" class="w-full p-2 border rounded text-gray-900" required></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Unidade *</label><input type="text" id="extUnidade" class="w-full p-2 border rounded text-gray-900" required></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Localização Exata *</label><input type="text" id="extLocalizacao" class="w-full p-2 border rounded text-gray-900" required></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Marca *</label><input type="text" id="extMarca" class="w-full p-2 border rounded text-gray-900" required></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Tipo/Classe *</label><select id="extTipo" class="w-full p-2 border rounded text-gray-900" required><option value="">Selecione</option><option value="Água">Água</option><option value="Pó Químico BC">Pó Químico BC</option><option value="Pó Químico ABC">Pó Químico ABC</option><option value="CO2">CO2</option><option value="Espuma">Espuma</option><option value="Classe K">Classe K</option></select></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Capacidade *</label><input type="text" id="extCapacidade" class="w-full p-2 border rounded text-gray-900" required></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Capacidade Extintora *</label><input type="text" id="extCapacidadeExtintora" class="w-full p-2 border rounded text-gray-900" required></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Última Recarga *</label><input type="date" id="extDataUltimaRecarga" class="w-full p-2 border rounded text-gray-900" required></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Próx. Teste Hidro *</label><input type="date" id="extDataProxTeste" class="w-full p-2 border rounded text-gray-900" required></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Número/Pat. *</label><input type="text" id="extNumero" class="w-full p-2 border rounded text-gray-900" required></div>
+ 
+<div class="md:col-span-3 mt-2 border-t pt-4">
+ <label class="block text-xs font-bold text-gray-700 mb-2"><i class="fa-solid fa-location-dot text-blue-600 mr-1"></i> Capturar Localização GPS (Obrigatório *)</label>
+ <div class="flex items-center space-x-3 bg-blue-50 p-3 rounded border border-blue-200 flex-wrap sm:flex-nowrap">
+ <button type="button" onclick="capturarGPS('ext')" class="bg-blue-600 text-white px-3 py-1.5 rounded shadow hover:bg-blue-700 text-sm font-bold flex items-center whitespace-nowrap mb-2 sm:mb-0"><i class="fa-solid fa-satellite-dish mr-2"></i> Capturar GPS</button>
+ <span id="extGpsStatus" class="text-xs text-blue-800 font-semibold w-full sm:w-auto">Nenhum GPS capturado.</span>
+ <input type="hidden" id="extGpsLat"><input type="hidden" id="extGpsLng">
+ </div>
+ </div>
+ </div>
+ <div class="flex justify-end space-x-2 mt-4 pt-4 border-t"><button type="button" onclick="closeModal('modalExtintor')" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-bold">Cancelar</button><button type="submit" class="bg-red-600 text-white px-4 py-2 rounded shadow hover:bg-red-700 font-bold">Salvar Equipamento</button></div>
+ </form>
+ </div>
+</div>
+
+<div id="modalMangueira" class="modal fixed inset-0 bg-black bg-opacity-50 justify-center items-center z-[9999] p-2 sm:p-4">
+ <div class="bg-white p-4 sm:p-6 rounded-lg shadow-lg w-full max-w-4xl max-h-[85vh] overflow-y-auto relative my-auto custom-scrollbar">
+ <button type="button" onclick="closeModal('modalMangueira')" class="absolute top-4 right-4 text-gray-400 hover:text-red-600 transition text-2xl font-bold"><i class="fa-solid fa-xmark"></i></button>
+ <h3 id="tituloModalMangueira" class="text-lg font-bold mb-4 border-b pb-2 text-gray-900 pr-8">Cadastrar Hidrante Base</h3>
+ <form id="formMangueira" onsubmit="return salvarEquipamentoLocal(event, 'mangueira')">
+ <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Data *</label><input type="date" id="manDataInspecao" class="w-full p-2 border rounded text-gray-900" required></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Unidade *</label><input type="text" id="manUnidade" class="w-full p-2 border rounded text-gray-900" required></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Localização Exata *</label><input type="text" id="manLocalizacao" class="w-full p-2 border rounded text-gray-900" required></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Diâmetro *</label><select id="manDiametro" class="w-full p-2 border rounded text-gray-900" required><option value="">Selecione</option><option value="1 1/2&quot;">1 1/2"</option><option value="2 1/2&quot;">2 1/2"</option></select></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Qtd de Mangueiras*</label><input type="number" id="manQuantidade" class="w-full p-2 border rounded text-gray-900" required></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Dimensão *</label><select id="manDimensao" class="w-full p-2 border rounded text-gray-900" required><option value="15m">15m</option><option value="20m">20m</option><option value="30m">30m</option></select></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Tipo *</label><select id="manTipo" class="w-full p-2 border rounded text-gray-900" required><option value="Tipo 1">Tipo 1</option><option value="Tipo 2">Tipo 2</option></select></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Próx. Teste Mang. *</label><input type="date" id="manProxTeste" class="w-full p-2 border rounded text-gray-900" required></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Número/Pat. *</label><input type="text" id="manNumero" class="w-full p-2 border rounded text-gray-900" required></div>
+
+ <div class="md:col-span-3 mt-2 border-t pt-4">
+ <label class="block text-xs font-bold text-gray-700 mb-2"><i class="fa-solid fa-location-dot text-blue-600 mr-1"></i> Capturar Localização GPS (Obrigatório *)</label>
+ <div class="flex items-center space-x-3 bg-blue-50 p-3 rounded border border-blue-200 flex-wrap sm:flex-nowrap">
+ <button type="button" onclick="capturarGPS('man')" class="bg-blue-600 text-white px-3 py-1.5 rounded shadow hover:bg-blue-700 text-sm font-bold flex items-center whitespace-nowrap mb-2 sm:mb-0"><i class="fa-solid fa-satellite-dish mr-2"></i> Capturar GPS</button>
+ <span id="manGpsStatus" class="text-xs text-blue-800 font-semibold w-full sm:w-auto">Nenhum GPS capturado.</span>
+ <input type="hidden" id="manGpsLat"><input type="hidden" id="manGpsLng">
+ </div>
+ </div>
+ </div>
+ <div class="flex justify-end space-x-2 mt-4 pt-4 border-t"><button type="button" onclick="closeModal('modalMangueira')" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-bold">Cancelar</button><button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 font-bold">Salvar Equipamento</button></div>
+ </form>
+ </div>
+</div>
+
+<!-- Modal Ações em Lote -->
+<div id="modalAcaoLote" class="modal fixed inset-0 bg-black bg-opacity-50 justify-center items-center z-[9999] p-4 hidden">
+    <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm my-auto relative">
+        <button type="button" onclick="closeModal('modalAcaoLote')" class="absolute top-4 right-4 text-gray-400 hover:text-red-600 transition text-2xl font-bold"><i class="fa-solid fa-xmark"></i></button>
+        <h3 class="text-lg font-bold mb-4 border-b pb-2 text-gray-900"><i class="fa-solid fa-layer-group text-yellow-500 mr-2"></i> Ações em Lote</h3>
+        <p class="text-sm text-gray-600 mb-4">Você está editando <strong id="loteCount">0</strong> equipamento(s).</p>
+        <form id="formAcaoLote" onsubmit="salvarLote(event); return false;">
+            <input type="hidden" id="loteCategoria">
+            <div class="mb-4">
+                <label class="block text-xs font-bold text-gray-700 mb-1">Nova Data da Última Recarga</label>
+                <input type="date" id="loteDataRecarga" class="w-full p-2 border rounded text-gray-900">
+                <span class="text-[10px] text-gray-500">Deixe em branco para não alterar</span>
+            </div>
+            <div class="mb-4">
+                <label class="block text-xs font-bold text-gray-700 mb-1">Nova Data do Próximo Teste (Validade)</label>
+                <input type="date" id="loteDataTeste" class="w-full p-2 border rounded text-gray-900">
+                <span class="text-[10px] text-gray-500">Deixe em branco para não alterar</span>
+            </div>
+            <div class="flex justify-end space-x-2 mt-4 pt-4 border-t">
+                <button type="button" onclick="closeModal('modalAcaoLote')" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-bold">Cancelar</button>
+                <button type="submit" class="bg-yellow-500 text-white px-4 py-2 rounded shadow hover:bg-yellow-600 font-bold"><i class="fa-solid fa-check mr-2"></i> Aplicar em Todos</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Linha do Tempo -->
+<div id="modalLinhaTempo" class="modal fixed inset-0 bg-black bg-opacity-60 justify-center items-center z-[10000] p-4 hidden">
+    <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg max-h-[85vh] overflow-y-auto relative my-auto custom-scrollbar">
+        <button type="button" onclick="closeModal('modalLinhaTempo')" class="absolute top-4 right-4 text-gray-400 hover:text-red-600 transition text-2xl font-bold"><i class="fa-solid fa-xmark"></i></button>
+        <h3 class="text-lg font-bold mb-2 text-gray-900"><i class="fa-solid fa-clock-rotate-left text-blue-600 mr-2"></i> Histórico do Equipamento</h3>
+        <p id="ltEquipName" class="text-sm font-bold text-gray-600 mb-6 border-b pb-2"></p>
+        
+        <div class="relative border-l-2 border-gray-300 ml-4 pl-6 pb-4 space-y-6" id="ltContainer">
+            <!-- Gerado via JS -->
+        </div>
+    </div>
+</div>
+
+<!-- Modal Inspeção e Assinatura -->
+<div id="modalInspecao" class="modal fixed inset-0 bg-black bg-opacity-50 justify-center items-center z-[9999] p-2 sm:p-4">
+ <div class="bg-white p-4 sm:p-6 rounded-lg shadow-lg w-full max-w-4xl max-h-[85vh] overflow-y-auto relative my-auto custom-scrollbar">
+ <button type="button" onclick="closeModal('modalInspecao')" class="absolute top-4 right-4 text-gray-400 hover:text-red-600 transition text-2xl font-bold"><i class="fa-solid fa-xmark"></i></button>
+ <h3 id="tituloModalInspecao" class="text-lg font-bold mb-4 border-b pb-2 text-gray-900 pr-8">Realizar Inspeção Operacional</h3>
+ <form id="formInspecao" onsubmit="salvarInspecaoLocal(event); return false;">
+ <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Equipamento Selecionado *</label><select id="inspEquipamento" onchange="preencherDadosInspecao()" class="w-full p-2 border rounded text-gray-900 bg-gray-50 font-bold" required></select></div>
+ <div><label class="block text-xs font-bold text-gray-700 mb-1">Data da Inspeção *</label><input type="date" id="inspData" class="w-full p-2 border rounded text-gray-900" required></div>
+ 
+<div id="inspEqInfo" class="md:col-span-2 hidden transition-all duration-300"></div>
+ 
+<div id="checklistContainer" class="md:col-span-2 border-2 border-gray-200 rounded p-4 bg-gray-50 mt-2 hidden">
+ <h4 class="font-bold text-gray-800 mb-3 border-b pb-1"><i class="fa-solid fa-list-check text-blue-600 mr-2"></i> Checklist de Conformidade</h4>
+ <div id="checklistItems" class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+ <!-- O checklist será gerado dinamicamente via JS -->
+ </div>
+ </div>
+
+ <div class="md:col-span-2 mt-2"><label class="block text-xs font-bold text-gray-700 mb-1">Observações da Inspeção (Detalhar falhas, se houver)</label><input type="text" id="inspObservacoes" class="w-full p-2 border rounded text-gray-900" placeholder="Ex: Lacre rompido, necessita recarga..."></div>
+ 
+<div class="md:col-span-2 mt-2">
+ <label class="block text-xs font-bold text-indigo-700 mb-2"><i class="fa-solid fa-camera mr-1"></i> Evidências Fotográficas (Até 3 fotos)</label>
+ <div class="flex space-x-2">
+ <label for="inspFotoCam" class="flex-1 bg-white border border-gray-300 text-gray-700 py-3 px-2 rounded shadow-sm text-center cursor-pointer hover:bg-gray-50 font-bold text-xs sm:text-sm flex flex-col items-center justify-center">
+ <i class="fa-solid fa-camera text-indigo-600 mb-1 text-lg"></i> Tirar Foto na Hora
+ <input type="file" id="inspFotoCam" accept="image/*" capture="camera" class="hidden" onchange="atualizarLabelFotos()">
+ </label>
+ <label for="inspFotoGal" class="flex-1 bg-white border border-gray-300 text-gray-700 py-3 px-2 rounded shadow-sm text-center cursor-pointer hover:bg-gray-50 font-bold text-xs sm:text-sm flex flex-col items-center justify-center">
+ <i class="fa-solid fa-images text-blue-600 mb-1 text-lg"></i> Abrir Galeria
+ <input type="file" id="inspFotoGal" accept="image/*" class="hidden" multiple onchange="atualizarLabelFotos()">
+ </label>
+ </div>
+ <div id="lblFotosSelecionadas" class="text-xs text-green-700 font-bold mt-2 hidden text-center bg-green-50 p-2 rounded border border-green-200"></div>
+ </div>
+ 
+<div class="md:col-span-2 border-t pt-4 mt-2">
+ <label class="block text-xs font-bold text-gray-700 mb-2"><i class="fa-solid fa-location-dot text-blue-600 mr-1"></i> Localização GPS (Obrigatório *)</label>
+ <div class="flex items-center space-x-3 mb-4 bg-blue-50 p-3 rounded border border-blue-200 flex-wrap sm:flex-nowrap">
+ <button type="button" onclick="capturarGPS('insp')" class="bg-blue-600 text-white px-3 py-1.5 rounded shadow hover:bg-blue-700 text-sm font-bold flex items-center whitespace-nowrap mb-2 sm:mb-0"><i class="fa-solid fa-satellite-dish mr-2"></i> Capturar GPS</button>
+ <span id="inspGpsStatus" class="text-xs text-blue-800 font-semibold w-full sm:w-auto">Nenhum GPS capturado.</span>
+ <input type="hidden" id="inspGpsLat"><input type="hidden" id="inspGpsLng">
+ </div>
+ 
+<label class="block text-xs font-bold text-gray-700 mb-2"><i class="fa-solid fa-pen-nib text-indigo-600 mr-1"></i> Assinatura Digital do Fiscal</label>
+ <div class="border-2 border-dashed border-gray-300 rounded bg-gray-50 flex flex-col items-center p-2 relative">
+ <canvas id="assinaturaCanvas" class="w-full h-24 bg-white cursor-crosshair border border-gray-200 shadow-inner rounded" style="touch-action: none;"></canvas>
+ <button type="button" onclick="limparAssinatura()" class="absolute bottom-2 right-2 bg-red-100 text-red-600 px-2 py-1 rounded text-xs font-bold shadow hover:bg-red-200 transition">Limpar</button>
+ </div>
+ </div>
+ </div>
+ 
+<div class="flex justify-end space-x-2 mt-4 pt-4 border-t bg-gray-50 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 p-4 rounded-b-lg"><button type="button" onclick="closeModal('modalInspecao')" class="px-4 sm:px-6 py-2 text-gray-600 hover:bg-gray-200 font-bold rounded">Cancelar</button><button type="submit" class="bg-green-600 text-white px-4 sm:px-6 py-2 rounded shadow hover:bg-green-700 font-bold text-sm sm:text-lg"><i class="fa-solid fa-check mr-2"></i> Finalizar Inspeção</button></div>
+ </form>
+ </div>
+</div>
+
+<!-- Modal para RESOLVER O.S. com Câmera -->
+<div id="modalResolverOS" class="modal fixed inset-0 bg-black bg-opacity-50 justify-center items-center z-[9999] p-4 hidden">
+ <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md my-auto relative">
+ <button type="button" onclick="closeModal('modalResolverOS')" class="absolute top-4 right-4 text-gray-400 hover:text-red-600 transition text-2xl font-bold"><i class="fa-solid fa-xmark"></i></button>
+ <h3 class="text-lg font-bold mb-4 border-b pb-2 text-gray-900"><i class="fa-solid fa-wrench text-green-600 mr-2"></i> Atualizar Ordem de Serviço</h3>
+ <form id="formResolverOS" onsubmit="confirmarResolucaoOS(event); return false;">
+ <input type="hidden" id="osResolverId">
+ 
+ <div class="mb-4">
+     <label class="block text-xs font-bold text-gray-700 mb-1">Ação Desejada</label>
+     <select id="osAcaoTipo" class="w-full p-2 border rounded text-gray-900 font-bold" onchange="toggleOSFields()">
+         <option value="concluir">Concluir OS (Problema Resolvido)</option>
+         <option value="terceirizada">Enviar para Terceirizada (Recarga/Manutenção)</option>
+     </select>
+ </div>
+
+ <div id="osFieldFoto" class="mb-4">
+ <p class="text-sm text-gray-600 mb-4">Para concluir, é obrigatório anexar uma foto comprovando a resolução.</p>
+ <label class="block text-xs font-bold text-indigo-700 mb-2"><i class="fa-solid fa-camera mr-1"></i> Foto da Solução *</label>
+ <div class="flex space-x-2">
+ <label for="osFotoCam" class="flex-1 bg-white border border-gray-300 text-gray-700 py-3 px-2 rounded shadow-sm text-center cursor-pointer hover:bg-gray-50 font-bold text-xs flex flex-col items-center justify-center">
+ <i class="fa-solid fa-camera text-indigo-600 mb-1 text-lg"></i> Câmera
+ <input type="file" id="osFotoCam" accept="image/*" capture="camera" class="hidden" onchange="atualizarLabelFotoOS()">
+ </label>
+ <label for="osFotoGal" class="flex-1 bg-white border border-gray-300 text-gray-700 py-3 px-2 rounded shadow-sm text-center cursor-pointer hover:bg-gray-50 font-bold text-xs flex flex-col items-center justify-center">
+ <i class="fa-solid fa-images text-blue-600 mb-1 text-lg"></i> Galeria
+ <input type="file" id="osFotoGal" accept="image/*" class="hidden" onchange="atualizarLabelFotoOS()">
+ </label>
+ </div>
+ <div id="lblFotoOS" class="text-xs text-green-700 font-bold mt-2 hidden text-center bg-green-50 p-2 rounded border border-green-200"></div>
+ </div>
+
+ <div id="osFieldTerceiro" class="mb-4 hidden">
+     <label class="block text-xs font-bold text-gray-700 mb-1">Nome da Empresa Terceirizada *</label>
+     <input type="text" id="osNomeEmpresa" class="w-full p-2 border rounded text-gray-900" placeholder="Ex: ExtinCeará Recargas">
+     <p class="text-[10px] text-gray-500 mt-1">O equipamento ficará com status "Manutenção Externa" até o retorno.</p>
+ </div>
+
+ <div class="flex justify-end space-x-2 mt-4 pt-4 border-t">
+ <button type="button" onclick="closeModal('modalResolverOS')" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-bold">Cancelar</button>
+ <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 font-bold"><i class="fa-solid fa-check mr-2"></i> Salvar</button>
+ </div>
+ </form>
+ </div>
+</div>
+
+<div id="modalRelatorio" class="modal fixed inset-0 bg-black bg-opacity-50 justify-center items-center z-[9999] p-4 hidden">
+ <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md my-auto">
+ <div class="flex justify-between items-center mb-4 border-b pb-2">
+ <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-file-contract text-blue-600 mr-2"></i> Relatório de Inspeções</h3>
+ <button type="button" onclick="closeModal('modalRelatorio')" class="text-red-500 text-xl font-bold">&times;</button>
+ </div>
+ <input type="hidden" id="relUnidade">
+ <p class="text-sm text-gray-600 mb-4">Unidade: <span id="relUnidadeTexto" class="font-bold text-gray-800"></span></p>
+ 
+<div class="space-y-3 mb-6">
+ <div><label class="block text-xs font-bold text-gray-700">Data Inicial</label><input type="date" id="relDataInicio" class="w-full p-2 border rounded"></div>
+ <div><label class="block text-xs font-bold text-gray-700">Data Final</label><input type="date" id="relDataFim" class="w-full p-2 border rounded"></div>
+ <div><label class="block text-xs font-bold text-gray-700">Filtrar por Tipo</label><select id="relTipo" class="w-full p-2 border rounded"><option value="Todos">Todos</option><option value="Extintor">Só Extintores</option><option value="Hidrante">Só Hidrantes/Mangueiras</option></select></div>
+ </div>
+ 
+<h5 class="text-xs font-bold text-gray-500 mb-2 uppercase text-center border-t pt-4">Opções de Exportação</h5>
+ <div class="grid grid-cols-3 gap-2">
+ <button type="button" onclick="exportarRelatorioPDF()" class="bg-gray-800 text-white text-xs font-bold py-2 rounded shadow hover:bg-gray-900 flex flex-col items-center justify-center"><i class="fa-solid fa-file-pdf mb-1 text-lg"></i> Imprimir/PDF</button>
+ <button type="button" onclick="exportarRelatorioExcel()" class="bg-green-600 text-white text-xs font-bold py-2 rounded shadow hover:bg-green-700 flex flex-col items-center justify-center"><i class="fa-solid fa-file-excel mb-1 text-lg"></i> Planilha</button>
+ <button type="button" onclick="exportarRelatorioWhatsApp()" class="bg-blue-500 text-white text-xs font-bold py-2 rounded shadow hover:bg-blue-600 flex flex-col items-center justify-center"><i class="fa-solid fa-share-nodes mb-1 text-lg"></i> Compartilhar</button>
+ </div>
+ </div>
+</div>
+
+<div id="modalViewFoto" class="modal fixed inset-0 bg-black bg-opacity-80 justify-center items-center z-[10000] p-4 hidden">
+ <div class="bg-white p-2 rounded-lg shadow-lg w-full max-w-lg flex flex-col items-center relative max-h-[85vh] overflow-y-auto custom-scrollbar">
+ <button type="button" onclick="closeModal('modalViewFoto')" class="absolute top-2 right-2 bg-red-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold border-2 border-white shadow hover:bg-red-700 z-10">&times;</button>
+ <div id="fotoGaleriaContainer" class="w-full flex flex-col space-y-4 pt-8 p-2"></div>
+ </div>
+</div>
+
+<div id="customAlertModal" class="modal fixed inset-0 bg-black bg-opacity-50 justify-center items-center z-[10000] p-4 hidden"><div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm text-center"><h3 id="customAlertTitle" class="text-lg font-bold mb-2 text-gray-800">Aviso</h3><p id="customAlertText" class="text-sm text-gray-600 mb-6 whitespace-pre-line"></p><button type="button" id="customAlertButton" onclick="fecharCustomAlert()" class="bg-red-600 text-white px-4 py-2 rounded shadow hover:bg-red-700 w-full font-bold">OK</button></div></div>
+<div id="modalConfirm" class="modal fixed inset-0 bg-black bg-opacity-50 justify-center items-center z-[10000] p-4 hidden"><div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm text-center"><h3 class="text-lg font-bold mb-2 text-red-600">Atenção!</h3><p id="confirmText" class="text-sm text-gray-600 mb-6 whitespace-pre-line"></p><div class="flex justify-center space-x-2"><button type="button" onclick="fecharConfirm()" class="bg-gray-300 text-gray-800 px-4 py-2 rounded shadow hover:bg-gray-400 w-full font-bold">Cancelar</button><button type="button" id="btnConfirmarAcao" class="bg-red-600 text-white px-4 py-2 rounded shadow hover:bg-red-700 w-full font-bold">Sim</button></div></div></div>
+<div id="modalScanner" class="modal fixed inset-0 bg-black bg-opacity-80 justify-center items-center z-[9999] p-4"><div class="bg-white p-4 rounded-lg w-full max-w-md max-h-[85vh] overflow-y-auto relative my-auto custom-scrollbar"><div class="flex justify-between items-center mb-2"><h3 class="text-lg font-bold">Escanear</h3><button type="button" onclick="fecharScanner()" class="text-red-500 font-bold text-xl"><i class="fa-solid fa-xmark"></i></button></div><div id="reader" style="width: 100%;"></div></div></div>
+<div id="modalViewQR" class="modal fixed inset-0 bg-black bg-opacity-50 justify-center items-center z-[9999] p-4"><div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm text-center flex flex-col items-center"><h3 class="text-lg font-bold mb-4" id="qrTitle">QR Code</h3><div id="qrCodeContainer" class="mb-4 bg-white"></div><button type="button" onclick="closeModal('modalViewQR')" class="bg-gray-800 text-white px-4 py-2 rounded shadow hover:bg-gray-900 w-full font-bold">Fechar</button></div></div>
+
+<!-- Modal Novo Usuário -->
+<div id="modalNovoUsuario" class="modal fixed inset-0 bg-black bg-opacity-50 justify-center items-center z-[9999] p-4 hidden">
+    <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm my-auto relative">
+        <button type="button" onclick="closeModal('modalNovoUsuario')" class="absolute top-4 right-4 text-gray-400 hover:text-red-600 transition text-2xl font-bold"><i class="fa-solid fa-xmark"></i></button>
+        <h3 class="text-lg font-bold mb-4 border-b pb-2 text-gray-900"><i class="fa-solid fa-user-shield text-blue-600 mr-2"></i> Cadastrar Acesso</h3>
+        <form onsubmit="salvarNovoUsuario(event); return false;">
+            <div class="mb-3">
+                <label class="block text-xs font-bold text-gray-700 mb-1">Login (Matrícula) *</label>
+                <input type="text" id="cadUserLogin" class="w-full p-2 border rounded font-bold uppercase" required placeholder="Ex: 123456">
+            </div>
+            <div class="mb-3">
+                <label class="block text-xs font-bold text-gray-700 mb-1">Nome Completo do Fiscal *</label>
+                <input type="text" id="cadUserNome" class="w-full p-2 border rounded font-bold uppercase" required placeholder="Ex: JOÃO SILVA">
+            </div>
+            <div class="mb-3">
+                <label class="block text-xs font-bold text-gray-700 mb-1">Unidade Vinculada *</label>
+                <input type="text" id="cadUserUnidade" class="w-full p-2 border rounded font-bold uppercase" required placeholder="Ex: SENAC IGUATU">
+            </div>
+            <div class="mb-3">
+                <label class="block text-xs font-bold text-gray-700 mb-1">Senha Padrão Inicial</label>
+                <input type="text" class="w-full p-2 border rounded font-bold bg-gray-100" value="mudar123" readonly>
+            </div>
+            <div class="flex justify-end space-x-2 mt-4 pt-4 border-t">
+                <button type="button" onclick="closeModal('modalNovoUsuario')" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-bold">Cancelar</button>
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 font-bold"><i class="fa-solid fa-check mr-2"></i> Criar Acesso</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Troca de Senha (Primeiro Acesso) -->
+<div id="modalTrocarSenha" class="modal fixed inset-0 bg-red-700 justify-center items-center z-[100000] p-4 hidden flex-col">
+    <div class="bg-white p-6 rounded-lg shadow-2xl w-full max-w-sm text-center relative">
+        <i class="fa-solid fa-user-lock text-4xl text-red-600 mb-4"></i>
+        <h3 class="text-xl font-black mb-2 text-gray-800">Primeiro Acesso</h3>
+        <p class="text-sm text-gray-600 mb-4 font-semibold border-b pb-4">Por motivos de segurança, você precisa criar uma senha pessoal antes de continuar.</p>
+        <form onsubmit="salvarNovaSenha(event); return false;">
+            <div class="text-left mb-3">
+                <label class="block text-xs font-bold text-gray-700 mb-1">Nova Senha *</label>
+                <input type="password" id="novaSenhaInp" class="w-full p-3 border-2 border-gray-300 rounded font-bold" required placeholder="Min 4 caracteres">
+            </div>
+            <div class="text-left mb-6">
+                <label class="block text-xs font-bold text-gray-700 mb-1">Confirme a Nova Senha *</label>
+                <input type="password" id="confirmaNovaSenhaInp" class="w-full p-3 border-2 border-gray-300 rounded font-bold" required>
+            </div>
+            <button type="submit" class="w-full bg-red-600 text-white px-4 py-3 rounded shadow hover:bg-red-700 font-bold text-lg transition"><i class="fa-solid fa-floppy-disk mr-2"></i> Salvar e Entrar</button>
+        </form>
+    </div>
+</div>
+
+<script src="js/app.js"></script>
+
+<script type="module" src="js/firebase-service.js"></script>
+</body>
+</html>
