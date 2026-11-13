@@ -2,6 +2,8 @@ const SENHA_ADMIN = "admin123";
 let currentTeam = localStorage.getItem('firesys_current_team'); 
 let currentUser = localStorage.getItem('firesys_current_user');
 let filaOffline = (() => { try { const q=JSON.parse(localStorage.getItem('firesys_offline_queue')||'[]'); return Array.isArray(q)?q:[]; } catch { return []; } })();
+window.obterFilaOffline = () => filaOffline;
+window.atualizarFilaOffline = (nova) => { filaOffline.splice(0, filaOffline.length, ...nova); updateSyncStatus(); };
 function escapeHTML(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function mensagemGravacao(r, entidade) { return r?.status === 'confirmado' ? `${entidade} salvo na nuvem.` : `${entidade} registrado localmente; sincronização pendente.`; }
 
@@ -35,6 +37,7 @@ function entrarNoSistema() {
     if (l === 'ADMIN' && p === SENHA_ADMIN) { 
         localStorage.setItem('firesys_current_user', 'ADMIN');
         localStorage.setItem('firesys_current_team', 'ADMIN');
+        localStorage.setItem('firesys_current_login', 'ADMIN');
         playLoginAnimation(checkLogin);
         return;
     } 
@@ -46,6 +49,10 @@ function entrarNoSistema() {
 
     const u = window.allUsuariosNuvem.find(x => normalizarString(x.login) === l && x.senha === p);
     if (!u) return mostrarErro("Usuário ou senha incorretos!");
+
+    if (u.ativo === false || u.bloqueado === true) {
+        return mostrarErro(u.bloqueado ? 'Acesso bloqueado. Procure o administrador.' : 'Usuário inativo. Procure o administrador.');
+    }
 
     // Se for o primeiro acesso, trava na tela de criar nova senha
     if (u.primeiroAcesso) {
@@ -61,6 +68,7 @@ function entrarNoSistema() {
     // Login normal de usuário
     localStorage.setItem('firesys_current_user', u.nome);
     localStorage.setItem('firesys_current_team', u.unidade);
+    localStorage.setItem('firesys_current_login', u.login);
     playLoginAnimation(checkLogin);
 }
 
@@ -120,7 +128,7 @@ if(btnLoteMan) btnLoteMan.classList.add('hidden');
 
 window.onload = () => { checkLogin(); window.addEventListener('online', flushFilaOffline); window.addEventListener('offline', updateSyncStatus); updateSyncStatus(); };
 
-function sairDoSistema() { document.getElementById('confirmText').innerText = "Deseja realmente sair?"; document.getElementById('btnConfirmarAcao').onclick = () => { localStorage.removeItem('firesys_current_team'); localStorage.removeItem('firesys_current_user'); location.reload(); }; document.getElementById('modalConfirm').classList.remove('hidden'); document.getElementById('modalConfirm').classList.add('flex'); }
+function sairDoSistema() { document.getElementById('confirmText').innerText = "Deseja realmente sair?"; document.getElementById('btnConfirmarAcao').onclick = () => { localStorage.removeItem('firesys_current_team'); localStorage.removeItem('firesys_current_user'); localStorage.removeItem('firesys_current_login'); location.reload(); }; document.getElementById('modalConfirm').classList.remove('hidden'); document.getElementById('modalConfirm').classList.add('flex'); }
 function fecharConfirm() { document.getElementById('modalConfirm').classList.add('hidden'); document.getElementById('modalConfirm').classList.remove('flex'); }
 
 window.activeTableView = { ext: null, man: null, insp: null, os: null };
@@ -557,6 +565,20 @@ window.processarRestauracaoBackup = function(event) {
 // ============================================
 // GESTÃO DE ACESSOS E USUÁRIOS (ADMIN)
 // ============================================
+// Revoga sessões de usuários inativados/bloqueados assim que a coleção atualiza.
+window.verificarSituacaoUsuarioLogado = function() {
+    const login = localStorage.getItem('firesys_current_login');
+    if (!login || login === 'ADMIN') return;
+    const usuario = (window.allUsuariosNuvem || []).find(u => u.login === login);
+    if (!usuario || usuario.ativo === false || usuario.bloqueado === true) {
+        localStorage.removeItem('firesys_current_user');
+        localStorage.removeItem('firesys_current_team');
+        localStorage.removeItem('firesys_current_login');
+        window.alert('Seu acesso foi desativado ou bloqueado pelo administrador.');
+        location.reload();
+    }
+};
+
 window.renderizarUsuarios = function() {
     const tbody = document.getElementById('usuariosTableBody');
     if(!tbody) return;
@@ -586,7 +608,7 @@ window.renderizarUsuarios = function() {
             <td colspan="5" class="p-3 font-bold text-gray-800 uppercase text-left text-base">
                 <div class="flex justify-between items-center">
                     <div>
-                        <i class="fa-solid fa-building text-red-600 mr-3"></i> ${unidade} 
+                        <i class="fa-solid fa-building text-red-600 mr-3"></i> ${escapeHTML(unidade)} 
                         <span class="text-xs bg-white border border-gray-300 px-2 py-0.5 rounded-full ml-2 text-gray-600">${groupedUsers[unidade].length} usuário(s)</span>
                     </div>
                     <i class="fa-solid fa-chevron-down text-gray-500 transition-transform duration-300" id="icon_${safeUnitId}"></i>
@@ -617,17 +639,26 @@ window.renderizarUsuarios = function() {
             const tr = document.createElement('tr');
             // Começa as linhas com a classe "hidden" para as gavetas iniciarem fechadas
             tr.className = `hover:bg-gray-50 border-b border-gray-200 transition-colors hidden ${safeUnitId}`;
-            const badge = u.primeiroAcesso ? `<span class="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-2 py-1 rounded shadow-sm"><i class="fa-solid fa-clock"></i> Pendente (Senha Padrão)</span>` : `<span class="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-1 rounded shadow-sm"><i class="fa-solid fa-check"></i> Senha Ativa (Alterada)</span>`;
+            const badgeSenha = u.primeiroAcesso ? `<span class="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-2 py-1 rounded shadow-sm"><i class="fa-solid fa-clock"></i> Pendente (Senha Padrão)</span>` : `<span class="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-1 rounded shadow-sm"><i class="fa-solid fa-check"></i> Senha Ativa (Alterada)</span>`;
             
+            const situacao = u.bloqueado === true
+                ? '<span class="text-red-700 font-bold">Bloqueado</span>'
+                : u.ativo === false
+                    ? '<span class="text-gray-600 font-bold">Inativo</span>'
+                    : '<span class="text-green-700 font-bold">Ativo</span>';
+            const badge = `${situacao}<div class="mt-1">${badgeSenha}</div>`;
+            const loginArg = JSON.stringify(u.login).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             // Coluna de ações fixada na direita (sticky right-0 bg-white z-10)
             tr.innerHTML = `
-                <td class="p-3 border-b font-bold text-gray-800 uppercase pl-6">${u.login}</td>
-                <td class="p-3 border-b text-gray-700 font-semibold">${u.nome}</td>
-                <td class="p-3 border-b text-gray-600 font-bold">${u.unidade}</td>
+                <td class="p-3 border-b font-bold text-gray-800 uppercase pl-6">${escapeHTML(u.login)}</td>
+                <td class="p-3 border-b text-gray-700 font-semibold">${escapeHTML(u.nome)}</td>
+                <td class="p-3 border-b text-gray-600 font-bold">${escapeHTML(u.unidade)}</td>
                 <td class="p-3 border-b">${badge}</td>
                 <td class="p-3 border-b text-center space-x-2 sticky right-0 bg-white z-10">
-                    <button onclick="resetarSenhaUsuario('${u.login}')" class="bg-orange-100 text-orange-700 px-3 py-1.5 rounded shadow-sm hover:bg-orange-200 font-bold text-xs transition mb-1 sm:mb-0" title="Resetar para mudar123"><i class="fa-solid fa-key mr-1"></i> Reset</button>
-                    <button onclick="excluirUsuario('${u.login}')" class="bg-red-100 text-red-700 px-3 py-1.5 rounded shadow-sm hover:bg-red-200 font-bold text-xs transition" title="Apagar Acesso Definitivo"><i class="fa-solid fa-trash-can"></i></button>
+                    <button onclick="resetarSenhaUsuario(${loginArg})" class="bg-orange-100 text-orange-700 px-3 py-1.5 rounded shadow-sm hover:bg-orange-200 font-bold text-xs transition mb-1 sm:mb-0" title="Resetar para mudar123"><i class="fa-solid fa-key mr-1"></i> Reset</button>
+                    <button onclick="alterarSituacaoUsuario(${loginArg}, 'ativo', ${u.ativo === false})" class="bg-blue-100 text-blue-800 px-3 py-1.5 rounded font-bold text-xs mb-1" title="Ativar ou desativar usuário">${u.ativo === false ? 'Ativar' : 'Desativar'}</button>
+                    <button onclick="alterarSituacaoUsuario(${loginArg}, 'bloqueado', ${u.bloqueado !== true})" class="bg-purple-100 text-purple-800 px-3 py-1.5 rounded font-bold text-xs mb-1" title="Bloquear ou desbloquear usuário">${u.bloqueado === true ? 'Desbloquear' : 'Bloquear'}</button>
+                    <button onclick="excluirUsuario(${loginArg})" class="bg-red-100 text-red-700 px-3 py-1.5 rounded shadow-sm hover:bg-red-200 font-bold text-xs transition" title="Apagar Acesso Definitivo"><i class="fa-solid fa-trash-can"></i></button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -655,7 +686,7 @@ window.salvarNovoUsuario = async function(e) {
     const btn = e.target.querySelector('button[type="submit"]');
     btn.disabled = true; btn.innerText = "Salvando...";
 
-    const novoUsr = { login, nome, unidade, senha, primeiroAcesso: true, role: 'fiscal', timestamp: Date.now() };
+    const novoUsr = { login, nome, unidade, senha, primeiroAcesso: true, role: 'fiscal', ativo: true, bloqueado: false, timestamp: Date.now() };
     
     try {
         if(window.salvarNoFirebaseDireto) await window.salvarNoFirebaseDireto('usuarios', login, novoUsr);
@@ -665,6 +696,26 @@ window.salvarNovoUsuario = async function(e) {
         window.showAlert("Erro ao criar usuário: " + err.message, true);
     }
     btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i> Criar Acesso';
+};
+
+window.alterarSituacaoUsuario = function(login, campo, valor) {
+    if (localStorage.getItem('firesys_current_team') !== 'ADMIN') return;
+    if (!['ativo', 'bloqueado'].includes(campo)) return;
+    const acao = campo === 'ativo' ? (valor ? 'ativar' : 'desativar') : (valor ? 'bloquear' : 'desbloquear');
+    document.getElementById('confirmText').innerText = `Deseja ${acao} o usuário ${login}?`;
+    document.getElementById('btnConfirmarAcao').onclick = async () => {
+        fecharConfirm();
+        const usuario = (window.allUsuariosNuvem || []).find(u => u.login === login);
+        if (!usuario) return window.showAlert('Usuário não encontrado.', true);
+        try {
+            if (!window.salvarNoFirebaseDireto) throw new Error('Firebase indisponível');
+            const atualizado = {...usuario, [campo]: valor, alteradoEm: Date.now(), alteradoPor: 'ADMIN'};
+            await window.salvarNoFirebaseDireto('usuarios', login, atualizado);
+            window.showAlert(`Usuário ${login}: operação concluída.`, false);
+        } catch (e) { window.showAlert('Não foi possível alterar o usuário: ' + e.message, true); }
+    };
+    document.getElementById('modalConfirm').classList.remove('hidden');
+    document.getElementById('modalConfirm').classList.add('flex');
 };
 
 window.resetarSenhaUsuario = function(login) {
@@ -707,6 +758,8 @@ window.salvarNovaSenha = async function(e) {
 
     try {
         let u = {...window.pendingUserLogin};
+        const usuarioAtual = (window.allUsuariosNuvem || []).find(x => x.login === u.login);
+        if (!usuarioAtual || usuarioAtual.ativo === false || usuarioAtual.bloqueado === true) throw new Error('Usuário inativo ou bloqueado');
         u.senha = s1;
         u.primeiroAcesso = false;
         
@@ -717,6 +770,7 @@ window.salvarNovaSenha = async function(e) {
         // Loga o usuário de fato no sistema
         localStorage.setItem('firesys_current_user', u.nome);
         localStorage.setItem('firesys_current_team', u.unidade);
+        localStorage.setItem('firesys_current_login', u.login);
         playLoginAnimation(checkLogin);
         window.pendingUserLogin = null;
     } catch(err) {

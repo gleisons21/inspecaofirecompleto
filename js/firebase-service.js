@@ -6,16 +6,16 @@ const nomeDoBanco = 'inspecaofire-db';
  try {
  const app = initializeApp(firebaseConfig); const auth = getAuth(app); const db = getFirestore(app);
  window.allEquipamentosNuvem = []; window.allInspecoesNuvem = []; window.allOsNuvem = []; window.allUnidadesNuvem = []; window.allUsuariosNuvem = []; window.firebaseUser = null;
- async function initCloud() { try { await signInAnonymously(auth); window.firebaseUser = auth.currentUser; if (window.firebaseUser) { onSnapshot(collection(db, nomeDoBanco, 'public', 'equipamentos'), (s) => { window.allEquipamentosNuvem = []; s.forEach(d => window.allEquipamentosNuvem.push(d.data())); if(window.atualizarVisaoDaEquipe) window.atualizarVisaoDaEquipe(); }); onSnapshot(collection(db, nomeDoBanco, 'public', 'inspecoes'), (s) => { window.allInspecoesNuvem = []; s.forEach(d => window.allInspecoesNuvem.push(d.data())); if(window.atualizarVisaoDaEquipe) window.atualizarVisaoDaEquipe(); }); onSnapshot(collection(db, nomeDoBanco, 'public', 'ordens_servico'), (s) => { window.allOsNuvem = []; s.forEach(d => window.allOsNuvem.push(d.data())); if(window.atualizarVisaoDaEquipe) window.atualizarVisaoDaEquipe(); }); onSnapshot(collection(db, nomeDoBanco, 'public', 'usuarios'), (s) => { window.allUsuariosNuvem = []; s.forEach(d => window.allUsuariosNuvem.push(d.data())); if(window.renderizarUsuarios) window.renderizarUsuarios(); }); } flushFilaOffline(); } catch (e) { console.error(e); } }
+ async function initCloud() { try { await signInAnonymously(auth); window.firebaseUser = auth.currentUser; if (window.firebaseUser) { onSnapshot(collection(db, nomeDoBanco, 'public', 'equipamentos'), (s) => { window.allEquipamentosNuvem = []; s.forEach(d => window.allEquipamentosNuvem.push(d.data())); if(window.atualizarVisaoDaEquipe) window.atualizarVisaoDaEquipe(); }); onSnapshot(collection(db, nomeDoBanco, 'public', 'inspecoes'), (s) => { window.allInspecoesNuvem = []; s.forEach(d => window.allInspecoesNuvem.push(d.data())); if(window.atualizarVisaoDaEquipe) window.atualizarVisaoDaEquipe(); }); onSnapshot(collection(db, nomeDoBanco, 'public', 'ordens_servico'), (s) => { window.allOsNuvem = []; s.forEach(d => window.allOsNuvem.push(d.data())); if(window.atualizarVisaoDaEquipe) window.atualizarVisaoDaEquipe(); }); onSnapshot(collection(db, nomeDoBanco, 'public', 'usuarios'), (s) => { window.allUsuariosNuvem = []; s.forEach(d => window.allUsuariosNuvem.push(d.data())); if(window.renderizarUsuarios) window.renderizarUsuarios(); if(window.verificarSituacaoUsuarioLogado) window.verificarSituacaoUsuarioLogado(); }); } flushFilaOffline(); } catch (e) { console.error(e); } }
  const caminho = (c,id) => doc(db, nomeDoBanco, 'public', c, id);
  const podeEnfileirar = (e) => !e || /unavailable|deadline-exceeded|network-request-failed/i.test(e.code||'');
  function guardarPendente(item) {
-   const fila = window.obterFilaOffline ? window.obterFilaOffline() : filaOffline;
+   const fila = window.obterFilaOffline ? window.obterFilaOffline() : JSON.parse(localStorage.getItem('firesys_offline_queue') || '[]');
    const nova = [...fila.filter(x => !(x.col===item.col && x.id===item.id)), item];
    try { localStorage.setItem('firesys_offline_queue', JSON.stringify(nova)); }
    catch(e) { throw new Error('Armazenamento offline cheio. Não foi possível salvar este registro; reduza as fotos ou reconecte.'); }
-   filaOffline.splice(0, filaOffline.length, ...nova);
-   updateSyncStatus();
+   if (window.atualizarFilaOffline) window.atualizarFilaOffline(nova);
+   if (window.updateSyncStatus) window.updateSyncStatus();
  }
  window.salvarNoFirebaseDireto = async function(c,id,d) { await setDoc(caminho(c,id),d); };
  window.salvarNoFirebase = async function(c,id,d) {
